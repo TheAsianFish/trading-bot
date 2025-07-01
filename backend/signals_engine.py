@@ -1,9 +1,34 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from utils import fetch_price_data
-from db import insert_generated_signal
+from plot_prices import fetch_price_history
+from db_insert import log_signal
 
+# ✅ Insert into generated_signals table
+import psycopg2
+import config
+
+def insert_generated_signal(ticker, signal_type, timestamp, signal_value, signal_strength):
+    try:
+        conn = psycopg2.connect(
+            dbname=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASSWORD,
+            host=config.DB_HOST,
+            port=config.DB_PORT
+        )
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO generated_signals (ticker, signal_type, signal_value, signal_strength, timestamp)
+            VALUES (%s, %s, %s, %s, %s);
+        """, (ticker, signal_type, signal_value, signal_strength, timestamp))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("Failed to insert generated signal:", e)
+
+# === SIGNAL CALCULATIONS ===
 def calculate_macd(data):
     exp1 = data['close'].ewm(span=12, adjust=False).mean()
     exp2 = data['close'].ewm(span=26, adjust=False).mean()
@@ -35,51 +60,85 @@ def calculate_rsi(prices, period=14):
     return rsi
 
 def generate_signals(ticker):
-    data = fetch_price_data(ticker)
-    if data is None or len(data) < 200:
+    df = fetch_price_history(ticker)
+    if df.empty or len(df) < 200:
+        print(f"Not enough data for {ticker}")
         return
 
+    df['close'] = df['price']  # Standardize column
+    df['volume'] = 1e6  # TEMPORARY: Assume volume exists (replace with real if available)
+    df.set_index('timestamp', inplace=True)
+    df.sort_index(inplace=True)
+
+    latest_time = df.index[-1]
+    latest_price = df['close'].iloc[-1]
+
     # MACD
-    macd_line, signal_line, _ = calculate_macd(data)
-    latest_macd = macd_line.iloc[-1]
-    signal_strength_macd = 'BUY' if latest_macd > 0 else 'SELL'
-    insert_generated_signal(ticker, 'MACD', data.index[-1], latest_macd, signal_strength_macd)
+    macd_line, _, _ = calculate_macd(df)
+    if not macd_line.empty:
+        latest_macd = macd_line.iloc[-1]
+        signal_strength_macd = 'BUY' if latest_macd > 0 else 'SELL'
+        insert_generated_signal(ticker, 'MACD', latest_time, latest_macd, signal_strength_macd)
 
-    # Bollinger Bands
-    _, upper_band, lower_band = calculate_bollinger(data)
-    latest_price = data['close'].iloc[-1]
-    if latest_price > upper_band.iloc[-1]:
-        insert_generated_signal(ticker, 'BOLLINGER', data.index[-1], latest_price, 'SELL')
-    elif latest_price < lower_band.iloc[-1]:
-        insert_generated_signal(ticker, 'BOLLINGER', data.index[-1], latest_price, 'BUY')
-    else:
-        insert_generated_signal(ticker, 'BOLLINGER', data.index[-1], latest_price, 'NEUTRAL')
+    # Bollinger
+    _, upper, lower = calculate_bollinger(df)
+    if not upper.empty and not lower.empty:
+        if latest_price > upper.iloc[-1]:
+            insert_generated_signal(ticker, 'BOLLINGER', latest_time, latest_price, 'SELL')
+        elif latest_price < lower.iloc[-1]:
+            insert_generated_signal(ticker, 'BOLLINGER', latest_time, latest_price, 'BUY')
+        else:
+            insert_generated_signal(ticker, 'BOLLINGER', latest_time, latest_price, 'NEUTRAL')
 
-    # Volume Spike
-    latest_volume = data['volume'].iloc[-1]
-    avg_volume = data['volume'].rolling(window=20).mean().iloc[-1]
-    if latest_volume > 1.5 * avg_volume:
-        direction = 'UP' if latest_price > data['close'].iloc[-2] else 'DOWN'
-        insert_generated_signal(ticker, 'VOLUME', data.index[-1], latest_volume, 'BUY' if direction == 'UP' else 'SELL')
-    else:
-        insert_generated_signal(ticker, 'VOLUME', data.index[-1], latest_volume, 'NEUTRAL')
+    # MA Cross (Golden/Death)
+    _, _, cross, death = calculate_ma_cross(df)
+    if not cross.empty and not death.empty:
+        if cross.iloc[-1]:
+            insert_generated_signal(ticker, 'GOLDEN_CROSS', latest_time, latest_price, 'BUY')
+        elif death.iloc[-1]:
+            insert_generated_signal(ticker, 'DEATH_CROSS', latest_time, latest_price, 'SELL')
+        else:
+            insert_generated_signal(ticker, 'MA_CROSS', latest_time, latest_price, 'NEUTRAL')
 
-    # Golden / Death Cross
-    _, _, golden_cross, death_cross = calculate_ma_cross(data)
-    if golden_cross.iloc[-1]:
-        insert_generated_signal(ticker, 'GOLDEN_CROSS', data.index[-1], latest_price, 'BUY')
-    elif death_cross.iloc[-1]:
-        insert_generated_signal(ticker, 'DEATH_CROSS', data.index[-1], latest_price, 'SELL')
-    else:
-        insert_generated_signal(ticker, 'MA_CROSS', data.index[-1], latest_price, 'NEUTRAL')
+    # Volume
+    if 'volume' in df.columns and len(df['volume'].dropna()) >= 20:
+        avg_volume = df['volume'].rolling(window=20).mean().iloc[-1]
+        latest_volume = df['volume'].iloc[-1]
+        direction = 'UP' if latest_price > df['close'].iloc[-2] else 'DOWN'
+        if latest_volume > 1.5 * avg_volume:
+            insert_generated_signal(ticker, 'VOLUME', latest_time, latest_volume, 'BUY' if direction == 'UP' else 'SELL')
+        else:
+            insert_generated_signal(ticker, 'VOLUME', latest_time, latest_volume, 'NEUTRAL')
 
     # RSI
-    rsi = calculate_rsi(data['close'])
-    rsi_value = rsi.iloc[-1]
-    if rsi_value > 70:
-        strength = 'SELL'
-    elif rsi_value < 30:
-        strength = 'BUY'
-    else:
-        strength = 'NEUTRAL'
-    insert_generated_signal(ticker, 'RSI', data.index[-1], rsi_value, strength)
+    rsi = calculate_rsi(df['close'])
+    if not rsi.empty:
+        rsi_value = rsi.iloc[-1]
+        if rsi_value > 70:
+            rsi_strength = 'SELL'
+        elif rsi_value < 30:
+            rsi_strength = 'BUY'
+        else:
+            rsi_strength = 'NEUTRAL'
+        insert_generated_signal(ticker, 'RSI', latest_time, rsi_value, rsi_strength)
+
+    # Auto-delete old generated signals (older than 90 days)
+    try:
+        conn = psycopg2.connect(
+            dbname=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASSWORD,
+            host=config.DB_HOST,
+            port=config.DB_PORT
+        )
+        cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM generated_signals
+            WHERE timestamp < NOW() - INTERVAL '90 days';
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("Failed to clean old generated signals:", e)
+

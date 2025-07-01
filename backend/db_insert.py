@@ -54,6 +54,12 @@ def insert_price(ticker, new_price, volume):
             INSERT INTO prices (ticker, price, volume) VALUES (%s, %s, %s);
         """, (ticker, new_price, volume))
 
+        # ✅ Auto-delete prices older than 90 days
+        cur.execute("""
+            DELETE FROM prices
+            WHERE ticker = %s AND timestamp < NOW() - INTERVAL '90 days';
+        """, (ticker,))
+
         conn.commit()
         print(f"Inserted {ticker} @ ${new_price}")
 

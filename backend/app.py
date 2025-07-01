@@ -1,11 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import psycopg2
 import config
 import pandas as pd
-from signals_engine import(
-    generate_rsi_signal, generate_macd_signal, generate_bollinger_signal, generate_volume_signal
-)
+from datetime import datetime, timedelta
+from signals_engine import generate_signals
 
 app = Flask(__name__)
 CORS(app)
@@ -36,7 +35,6 @@ def recent_signals():
         cur.close()
         conn.close()
 
-        #Convert result to JSON format
         data = [
             {"timestamp": str(r[0]), "ticker": r[1], "type": r[2], "price": float(r[3])}
             for r in rows
@@ -45,19 +43,41 @@ def recent_signals():
     
     except Exception as e:
         return jsonify({"error": str(e)})
-    
+
 #Get price history for a specific ticker 
 @app.route("/prices/<ticker>")
 def price_history(ticker):
     try:
+        range_param = request.args.get("range", default="All")
+
+        now = datetime.utcnow()
+        range_map = {
+            "24h": now - timedelta(days=1),
+            "7d": now - timedelta(days=7),
+            "30d": now - timedelta(days=30),
+            "90d": now - timedelta(days=90),
+            "All": None
+        }
+        threshold = range_map.get(range_param, None)
+
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("""
-            SELECT timestamp, price
-            FROM prices
-            WHERE ticker = %s
-            ORDER BY timestamp ASC;
-        """, (ticker,))
+
+        if threshold:
+            cur.execute("""
+                SELECT timestamp, price
+                FROM prices
+                WHERE ticker = %s AND timestamp >= %s
+                ORDER BY timestamp ASC;
+            """, (ticker, threshold))
+        else:
+            cur.execute("""
+                SELECT timestamp, price
+                FROM prices
+                WHERE ticker = %s
+                ORDER BY timestamp ASC;
+            """, (ticker,))
+
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -66,11 +86,16 @@ def price_history(ticker):
             {"timestamp": str(r[0]), "price": float(r[1])}
             for r in rows
         ]
+
+        if range_param in ["30d", "90d", "All"] and len(data) > 100:
+            step = 4 if range_param == "30d" else 6
+            data = data[::step]
+
         return jsonify(data)
 
     except Exception as e:
         return jsonify({"error": str(e)})
-    
+
 #Summary of signal counts by type
 @app.route("/signals/summary")
 def signal_summary():
@@ -88,19 +113,15 @@ def signal_summary():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+# Corrected signal generator route
 @app.route("/signals/generate/<ticker>", methods=["POST"])
-def generate_signals(ticker):
+def generate_signals_route(ticker):
     try:
-
-        generate_rsi_signal(ticker)
-        generate_macd_signal(ticker)
-        generate_bollinger_signal(ticker)
-        generate_volume_signal(ticker)
-
-        return jsonify({"status": f"RSI and MACD signals generated for {ticker}"})
+        generate_signals(ticker)
+        return jsonify({"status": f"Signals generated for {ticker}"})
     except Exception as e:
         return jsonify({"error": str(e)})
-    
+
 # Endpoint to view recent generated signals for a ticker
 @app.route("/signals/generated/<ticker>", methods=["GET"])
 def get_generated_signals(ticker):
@@ -119,7 +140,6 @@ def get_generated_signals(ticker):
     except Exception as e:
         return jsonify({"error": str(e)})
 
-    
 #Run the Flask server locally
 if __name__ == "__main__":
     app.run(debug=True)

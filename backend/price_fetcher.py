@@ -6,15 +6,16 @@ import config
 
 def get_price_from_yahoo(ticker):
     stock = yf.Ticker(ticker)
-    todays_data = stock.history(period = "1d")
+    # ✅ Requesting only 1 hour of data, 1 bar
+    data = stock.history(period="1h", interval="60m")
 
-    if todays_data.empty:
+    if data.empty:
         print(f"No data found for {ticker}")
         return None, None, None
     
-    last_price = todays_data['Close'].iloc[-1]
-    open_price = todays_data['Open'].iloc[-1]
-    volume = todays_data['Volume'].iloc[-1]
+    last_price = data['Close'].iloc[-1]
+    open_price = data['Open'].iloc[-1]
+    volume = data['Volume'].iloc[-1]
 
     return round(float(last_price), 2), round(float(open_price), 2), int(volume)
 
@@ -34,15 +35,14 @@ def fetch_and_store_all():
                 log_signal(symbol, "OPEN_DOWN", price)
                 send_alert(f"{symbol} is DOWN {pct_change:.2%} since open (${open_price} → ${price})", config.DISCORD_WEBHOOK)
 
-            #Insert into DB only after analysis
             insert_price(symbol, price, volume)
 
-print("Starting price fetcher... Press Ctrl+C to stop.")
+print("Starting price fetcher (hourly)... Press Ctrl+C to stop.")
 try:
     while True:
         fetch_and_store_all()
-        print("Cycle complete. Sleeping 5 minutes...\n")
-        time.sleep(300)
+        print("Cycle complete. Sleeping 1 hour...\n")
+        time.sleep(3600)  # ✅ Sleep for 1 hour
 
 except KeyboardInterrupt:
     print("Stopped by user")

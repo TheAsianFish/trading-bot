@@ -22,20 +22,25 @@ ChartJS.register(
   Legend
 );
 
-function PriceChart({ ticker, data }) {
+function PriceChart({ ticker, range = 'All' }) {
+  const [data, setData] = useState([]);
+
+  useEffect(() => {
+    if (!ticker) return;
+    fetch(`http://localhost:5000/prices/${ticker}?range=${range}`)
+      .then((res) => res.json())
+      .then(setData)
+      .catch((err) => console.error('Error fetching prices:', err));
+  }, [ticker, range]);
+
   if (!data || data.length === 0) return <p>No price data available.</p>;
 
-  // 🕒 Limit to last 6 hours
-  const now = new Date();
-  const cutoff = new Date(now.getTime() - 6 * 60 * 60 * 1000); // 6 hours ago
-  const filteredData = data.filter(point => new Date(point.timestamp) > cutoff);
-
   const chartData = {
-    labels: filteredData.map(point => new Date(point.timestamp)),
+    labels: data.map(point => new Date(point.timestamp)),
     datasets: [
       {
         label: `${ticker} Price`,
-        data: filteredData.map(point => point.price),
+        data: data.map(point => point.price),
         fill: false,
         borderColor: 'rgb(75, 192, 192)',
         tension: 0.1
@@ -59,7 +64,7 @@ function PriceChart({ ticker, data }) {
       x: {
         type: 'time',
         time: {
-          unit: 'minute'
+          unit: range === '24h' ? 'hour' : range === '7d' ? 'day' : 'week'
         },
         title: {
           display: true,
@@ -77,7 +82,7 @@ function PriceChart({ ticker, data }) {
   };
 
   return (
-    <div className="w-full h-[400px]">
+    <div className="w-full h-[500px] sm:h-[600px]">
       <Line data={chartData} options={options} />
     </div>
   );
