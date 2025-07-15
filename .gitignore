@@ -40,3 +40,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Lambda
+lambda_deploy/
+*.zip
