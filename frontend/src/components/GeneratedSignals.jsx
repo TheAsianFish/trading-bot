@@ -6,15 +6,17 @@ function GeneratedSignals({ ticker }) {
   const [data, setData] = useState([]);
   const [filter, setFilter] = useState({ BUY: true, SELL: true, NEUTRAL: true });
 
+  const API_BASE = "http://Trading-bot-backend-env.eba-mztx8vdc.us-east-2.elasticbeanstalk.com";
+
   useEffect(() => {
     if (!ticker) return;
-    fetch(`http://localhost:5000/signals/generated/${ticker}`)
+    fetch(`${API_BASE}/signals/generated/${ticker}`)
       .then((res) => res.json())
       .then((res) => setData(res))
       .catch((err) => console.error('Error fetching generated signals:', err));
   }, [ticker]);
 
-  const filtered = data.filter(item => filter[item.signal_strength]);
+  const filtered = Array.isArray(data) ? data.filter(item => filter[item.signal_strength]) : [];
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded shadow p-4">

@@ -25,9 +25,11 @@ ChartJS.register(
 function PriceChart({ ticker, range = 'All' }) {
   const [data, setData] = useState([]);
 
+  const API_BASE = "http://Trading-bot-backend-env.eba-mztx8vdc.us-east-2.elasticbeanstalk.com";
+
   useEffect(() => {
     if (!ticker) return;
-    fetch(`http://localhost:5000/prices/${ticker}?range=${range}`)
+    fetch(`${API_BASE}/prices/${ticker}?range=${range}`)
       .then((res) => res.json())
       .then(setData)
       .catch((err) => console.error('Error fetching prices:', err));
@@ -36,17 +38,18 @@ function PriceChart({ ticker, range = 'All' }) {
   if (!data || data.length === 0) return <p>No price data available.</p>;
 
   const chartData = {
-    labels: data.map(point => new Date(point.timestamp)),
+    labels: Array.isArray(data) ? data.map(point => new Date(point.timestamp)) : [],
     datasets: [
       {
         label: `${ticker} Price`,
-        data: data.map(point => point.price),
+        data: Array.isArray(data) ? data.map(point => point.price) : [],
         fill: false,
         borderColor: 'rgb(75, 192, 192)',
         tension: 0.1
       }
     ]
   };
+
 
   const options = {
     responsive: true,

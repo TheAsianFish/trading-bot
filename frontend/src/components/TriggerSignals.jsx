@@ -6,11 +6,13 @@ function TriggerSignals({ ticker, onRefresh }) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
 
+  const API_BASE = "http://Trading-bot-backend-env.eba-mztx8vdc.us-east-2.elasticbeanstalk.com";
+
   const handleGenerate = async () => {
     setLoading(true);
     setStatus(null);
     try {
-      const res = await fetch(`http://localhost:5000/signals/generate/${ticker}`, {
+      const res = await fetch(`${API_BASE}/signals/generate/${ticker}`, {
         method: 'POST',
       });
       const result = await res.json();

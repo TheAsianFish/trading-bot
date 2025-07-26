@@ -46,8 +46,10 @@ function App() {
   const [dateRange, setDateRange] = useState('24h');
   const REFRESH_INTERVAL_MS = 180000;
 
+  const API_BASE = "http://Trading-bot-backend-env.eba-mztx8vdc.us-east-2.elasticbeanstalk.com";
+
   const fetchPriceData = () => {
-    fetch(`http://localhost:5000/prices/${ticker}?range=${dateRange}`)
+    fetch(`${API_BASE}/prices/${ticker}?range=${dateRange}`)
       .then(res => res.json())
       .then(setPriceData)
       .catch(err => console.error(err));
@@ -56,13 +58,13 @@ function App() {
   useEffect(() => { fetchPriceData(); }, [ticker, dateRange]);
 
   const fetchSignalData = () => {
-    fetch('http://localhost:5000/signals/recent')
+    fetch(`${API_BASE}/signals/recent`)
       .then(res => res.json())
       .then(setSignals)
       .catch(err => console.error(err));
   };
   const fetchSummaryData = () => {
-    fetch('http://localhost:5000/signals/summary')
+    fetch(`${API_BASE}/signals/summary`)
       .then(res => res.json())
       .then(setSummaryData)
       .catch(err => console.error(err));
@@ -86,13 +88,16 @@ function App() {
   const now = Date.now();
   const daysToMs = { '24h': 86400000, '7d': 604800000, '30d': 2592000000, '90d': 7776000000 };
   const intentMap = { DROP_ALERT: 'SELL', OPEN_DOWN: 'SELL', OPEN_UP: 'BUY', MA_CROSS: 'SELL' };
-  const filteredSignals = signals
-    ?.filter(s => intentMap[s.type] ? signalFilter[intentMap[s.type]] : true)
+  const safeSignals = Array.isArray(signals) ? signals : [];
+
+  const filteredSignals = safeSignals
+    .filter(s => intentMap[s.type] ? signalFilter[intentMap[s.type]] : true)
     .filter(s => {
       if (dateRange !== 'All' && now - new Date(s.timestamp).getTime() > daysToMs[dateRange]) return false;
       if (tickerFilter !== 'ALL' && s.ticker !== tickerFilter) return false;
       return true;
     });
+
 
   return (
     <div className="min-h-screen font-sans p-6 transition-colors bg-white dark:bg-gray-900 text-black dark:text-gray-100">
