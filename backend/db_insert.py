@@ -1,6 +1,6 @@
 import psycopg2
+import json
 import config
-from alert import send_alert
 
 # Insert the latest price into the database, with signal checks
 def insert_price(ticker, new_price, volume, timestamp, conn=None, cursor=None):
@@ -24,7 +24,6 @@ def insert_price(ticker, new_price, volume, timestamp, conn=None, cursor=None):
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (ticker, timestamp) DO NOTHING;
         """, (ticker, new_price, volume, timestamp))
-        print(f"Inserted {ticker} @ ${new_price} at {timestamp}")
 
         # Clean up old prices (older than 90 days)
         cursor.execute("""
@@ -34,6 +33,7 @@ def insert_price(ticker, new_price, volume, timestamp, conn=None, cursor=None):
 
         if close_conn:
             conn.commit()
+        print(f"Inserted {ticker} @ ${new_price} at {timestamp}")
 
     except Exception as e:
         print("Insert failed:", e)
@@ -60,15 +60,15 @@ def get_last_n_prices(ticker, n, conn=None, cursor=None):
 
         cursor.execute("""
             SELECT price FROM prices
-            WHERE ticker = %s 
+            WHERE ticker = %s
             ORDER BY timestamp DESC
             LIMIT %s
         """, (ticker, n))
 
-        results = cursor.fetchall()
-        return [float(row[0]) for row in results]
+        rows = cursor.fetchall()
+        return [float(r[0]) for r in rows]
 
-    except Exception as e: 
+    except Exception as e:
         print("Failed to get past prices:", e)
         return []
     
@@ -77,8 +77,26 @@ def get_last_n_prices(ticker, n, conn=None, cursor=None):
             if 'cursor' in locals(): cursor.close()
             if 'conn' in locals(): conn.close()
 
-# Record signal events in 'signals' table
-def log_signal(ticker, signal_type, price, conn=None, cursor=None):
+# Unified signals
+def insert_signal(
+    ticker,
+    signal_type,
+    action,
+    signal_value=None,
+    confidence=None,
+    strength=None,
+    params=None,           # dict -> JSONB
+    triggered_by="auto",
+    message=None,
+    timestamp=None,
+    strategy=None,
+    conn=None,
+    cursor=None
+):
+    """
+    Insert a row into the unified `signals` table.
+    All fields map to the new schema; pass only what you need.
+    """
     close_conn = False
     try:
         if conn is None or cursor is None:
@@ -93,13 +111,35 @@ def log_signal(ticker, signal_type, price, conn=None, cursor=None):
             close_conn = True
 
         cursor.execute("""
-            INSERT INTO signals (ticker, type, price, timestamp)
-            VALUES (%s, %s, %s, NOW());
-        """, (ticker, signal_type, price))
+            INSERT INTO signals (
+                ticker, signal_type, strategy, action,
+                signal_value, confidence, strength, params,
+                triggered_by, message, timestamp
+            )
+            VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                COALESCE(%s, NOW())
+            );
+        """, (
+            ticker,
+            signal_type,
+            strategy,                       # strategy (optional; set later if you use variants)
+            action,
+            signal_value,
+            confidence,
+            strength,
+            json.dumps(params) if params else None,
+            triggered_by,
+            message,
+            timestamp
+        ))
 
         if close_conn:
             conn.commit()
-        print(f"Logged signal: {ticker} {signal_type} @ ${price}")
+        print(f"Inserted signal: {ticker} {signal_type}/{action} value={signal_value}")
+
 
     except Exception as e:
         print("Failed to log signal:", e)
@@ -108,36 +148,3 @@ def log_signal(ticker, signal_type, price, conn=None, cursor=None):
         if close_conn:
             if 'cursor' in locals(): cursor.close()
             if 'conn' in locals(): conn.close()
-
-# Create the 'generated_signals' table if it doesn't exist
-def create_generated_signals_table():
-    try:
-        conn = psycopg2.connect(
-            dbname=config.DB_NAME,
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            host=config.DB_HOST,
-            port=config.DB_PORT
-        )
-        cur = conn.cursor()
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS generated_signals (
-                id SERIAL PRIMARY KEY,
-                ticker TEXT NOT NULL,
-                signal_type TEXT NOT NULL,
-                signal_value REAL,
-                signal_strength TEXT,
-                timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-
-        conn.commit()
-        print("✅ generated_signals table is ready")
-
-    except Exception as e:
-        print("Failed to create generated_signals table:", e)
-
-    finally:
-        if 'cur' in locals(): cur.close()
-        if 'conn' in locals(): conn.close()

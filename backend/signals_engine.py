@@ -2,31 +2,48 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from plot_prices import fetch_price_history
-from db_insert import log_signal
 
-# ✅ Insert into generated_signals table
-import psycopg2
-import config
+from db_insert import insert_signal
 
-def insert_generated_signal(ticker, signal_type, timestamp, signal_value, signal_strength):
-    try:
-        conn = psycopg2.connect(
-            dbname=config.DB_NAME,
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            host=config.DB_HOST,
-            port=config.DB_PORT
-        )
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO generated_signals (ticker, signal_type, signal_value, signal_strength, timestamp)
-            VALUES (%s, %s, %s, %s, %s);
-        """, (ticker, signal_type, signal_value, signal_strength, timestamp))
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print("Failed to insert generated signal:", e)
+def insert_generated_signal(
+    ticker: str,
+    signal_type: str,
+    timestamp,
+    signal_value,
+    signal_strength,          # 'BUY' | 'SELL' | 'NEUTRAL' (from your current code)
+    *,
+    triggered_by: str = "manual",
+    params: dict | None = None,
+    message: str | None = None,
+    confidence: float | None = None,
+    strength: str | None = None
+):
+    """
+    Adapter: keep existing call sites but write to the unified `signals` table.
+    - Maps `signal_strength` -> `action`
+    - Passes through value/params/timestamp
+    - Leaves confidence optional for now
+    """
+    action = signal_strength if signal_strength in ("BUY", "SELL") else "NEUTRAL"
+    # Default strength lightly derived unless caller overrides
+    final_strength = strength or ("high" if action in ("BUY", "SELL") else "low")
+
+    # Minimal, readable message if none provided
+    if not message:
+        message = f"{ticker} {signal_type} → {action} (value={signal_value})"
+
+    insert_signal(
+        ticker=ticker,
+        signal_type=signal_type,
+        action=action,
+        signal_value=float(signal_value) if signal_value is not None else None,
+        confidence=confidence,
+        strength=final_strength,
+        params=params,
+        triggered_by=triggered_by,
+        message=message,
+        timestamp=timestamp
+    )
 
 # === SIGNAL CALCULATIONS ===
 def calculate_macd(data):
