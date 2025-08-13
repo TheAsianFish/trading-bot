@@ -119,7 +119,7 @@ def insert_signal(
             VALUES (
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s,
+                %s, %s,
                 COALESCE(%s, NOW())
             );
         """, (
