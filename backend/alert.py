@@ -1,17 +1,20 @@
 # alert.py
 import os
 import requests
+from typing import Optional
 
 DEFAULT_WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL")
 
-def send_alert(message: str, webhook_url: str | None = None, timeout_sec: int = 5) -> bool:
+def send_alert(message: str,
+               webhook_url: Optional[str] = None,
+               timeout_sec: int = 5) -> bool:
     """
     Send a simple Discord webhook message.
-    Returns True on success (HTTP 200 or 204), False otherwise.
+    Returns True on success (HTTP 200/204), False otherwise.
     """
     url = webhook_url or DEFAULT_WEBHOOK
     if not url:
-        print("send_alert: No webhook URL provided or in env DISCORD_WEBHOOK_URL.")
+        print("send_alert: No webhook URL provided and DISCORD_WEBHOOK_URL not set.")
         return False
 
     try:
