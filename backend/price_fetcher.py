@@ -1,64 +1,70 @@
-import os
+# price_fetcher.py
+import os, time, math
+from datetime import datetime, timezone
 import yfinance as yf
 from db_insert import insert_price
-import pandas as pd
 
-def _get_latest_bar(ticker):
-    """
-    Return (last_price, last_volume, last_timestamp_utc) using 1m data if available,
-    otherwise fallback to 60m. Returns (None, None, None) if no data.
-    """
+TICKERS = [t.strip() for t in os.environ.get("TICKERS", "AAPL,MSFT,GOOGL,TSLA,^GSPC,BTC-USD,ETH-USD,SOL-USD").split(",") if t.strip()]
+
+def _tz_utc(df):
+    if df is None or df.empty:
+        return df
+    return df.tz_localize("UTC") if df.index.tz is None else df.tz_convert("UTC")
+
+def _fetch_hourly_once(ticker: str, period: str, interval: str):
     tk = yf.Ticker(ticker)
+    df = tk.history(period=period, interval=interval, auto_adjust=False, actions=False)
+    if df is None or df.empty:
+        return None
+    df = _tz_utc(df)
+    # Normalize to hourly frame
+    if "Close" in df.columns:
+        if interval == "1m":
+            h = df["Close"].resample("1H").last().to_frame("price")
+            h["volume"] = df["Volume"].resample("1H").sum()
+        else:  # 60m already hourly
+            h = df["Close"].to_frame("price")
+            h["volume"] = df.get("Volume")
+        return h.dropna(subset=["price"])
+    return None
 
-    intraday = tk.history(period="1d", interval="1m")
-    if intraday is None or intraday.empty:
-        intraday = tk.history(period="1d", interval="60m")
-    if intraday is None or intraday.empty:
-        print(f"[yf] No intraday data for {ticker}")
-        return None, None, None
-
-    last_row = intraday.iloc[-1]
-    last_price = float(last_row.get("Close"))
-    last_volume_raw = last_row.get("Volume")
-    last_volume = None if pd.isna(last_volume_raw) else int(last_volume_raw)
-    last_ts = last_row.name.to_pydatetime()  # ensure psycopg2-friendly tz-aware datetime
-    return round(last_price, 4), last_volume, last_ts
-
+def _fetch_hourly_with_retry(ticker: str):
+    attempts = [
+        ("1d",  "1m"),   # best fidelity → resample to 1H
+        ("7d", "60m"),   # stable hourly for last week
+        ("30d","60m"),   # last resort
+    ]
+    for (period, interval) in attempts:
+        for i in range(3):  # retry 3x per combo
+            try:
+                h = _fetch_hourly_once(ticker, period, interval)
+                if h is not None and not h.empty:
+                    print(f"[yf] {ticker} {period}/{interval} → {len(h)} rows")
+                    return h
+                else:
+                    print(f"[yf] empty for {ticker} ({period}/{interval}) try={i+1}")
+            except Exception as e:
+                print(f"[yf] error {ticker} {period}/{interval} try={i+1}: {e}")
+            time.sleep(1.5 * (i + 1))  # backoff
+    print(f"[yf] give up {ticker}")
+    return None
 
 def fetch_and_store_all():
-    # Resolve tickers
-    tickers_env = os.environ.get("TICKERS")
-    if tickers_env:
-        tickers = [t.strip() for t in tickers_env.split(",") if t.strip()]
-        if not tickers:
-            print("TICKERS env var provided but empty.")
-            return
-    else:
-        tickers = ["AAPL", "MSFT", "GOOGL", "TSLA", "AMZN", "META", "NVDA",
-                   "^GSPC", "BTC-USD", "ETH-USD", "SOL-USD"]
-
-    for symbol in tickers:
-        try:
-            last_price, last_volume, ts = _get_latest_bar(symbol)
-            if last_price is None or ts is None:
-                print(f"[skip] No data for {symbol}")
-                continue
-
-            # Ingest only — no signals or alerts here
-            try:
-                insert_price(symbol, last_price, last_volume, ts)
-                print(f"[prices] inserted {symbol} @ {last_price} ({ts})")
-            except Exception as ie:
-                print(f"[prices] insert failed for {symbol}: {ie}")
-
-        except Exception as e:
-            print(f"[loop] failed for {symbol}: {e}")
-
-
-def main():
-    print("Starting price fetcher (ingestion only)…")
-    fetch_and_store_all()
-    print("Done.")
-
-if __name__ == "__main__":
-    main()
+    total_inserted = 0
+    for t in TICKERS:
+        h = _fetch_hourly_with_retry(t)
+        if h is None or h.empty:
+            print(f"[ingest] skip {t}: no data")
+            continue
+        count = 0
+        for ts, row in h.iterrows():
+            insert_price(
+                ticker=t,
+                new_price=float(row["price"]),
+                volume=int((row.get("volume") or 0)),
+                timestamp=ts.to_pydatetime()
+            )
+            count += 1
+        total_inserted += count
+        print(f"[ingest] {t}: wrote {count} hourly bars")
+    print(f"[ingest] total={total_inserted}")
