@@ -123,15 +123,19 @@ python backend/db_setup.py
 | volume     | BIGINT   | Daily volume         |
 | timestamp  | TIMESTAMP| Time of record       |
 
-### `generated_signals`
-| Column          | Type      |
-|-----------------|-----------|
-| id              | SERIAL    |
-| ticker          | TEXT      |
-| signal_type     | TEXT      |
-| signal_value    | REAL      |
-| signal_strength | TEXT      |
-| timestamp       | TIMESTAMP |
+### `signals`
+| Column         | Type       |
+|----------------|------------|
+| id             | SERIAL     |
+| ticker         | TEXT       |
+| signal_type    | TEXT       |
+| signal_value   | REAL       |
+| strategy       | TEXT       |
+| confidence     | REAL       |
+| action         | TEXT       |
+| strength       | TEXT       |
+| ...            | ...        |
+| timestamp      | TIMESTAMPZ |
 
 ---
 
@@ -141,7 +145,7 @@ python backend/db_setup.py
 - **MACD** — moving average crossovers
 - **BOLLINGER** — price volatility bands
 - **MA Cross** — 50/200-day golden/death crosses
-- **VOLUME** — spike detection for trend changes
+- **THRESHOLD** — daily open percentage move model
 
 ---
 
@@ -152,6 +156,10 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Set API base URL
+
+VITE_API_BASE=https://your-elastic-beanstalk-url
 
 ---
 
