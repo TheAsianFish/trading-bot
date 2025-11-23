@@ -1,12 +1,14 @@
 # 🧠 Trading Bot Dashboard (Fullstack)
 
-An advanced trading signal dashboard and automation system built with **React**, **Flask**, and **PostgreSQL**. Designed to detect technical indicators and trading events, visualize them in a clean UI, and prepare for future **AWS automation** and **algorithmic trading integration**.
+An advanced trading signal dashboard and automation system built with **React**, **Flask**, and **PostgreSQL**. Designed to visualize prices, detect technical indicators and trading events, monitor them in a clean UI, and automated on **AWS Lambda**, **Elastic Beanstalk**, and other cloud services.
 
 > ⚙️ Built for eventual real-time performance, quantitative strategy expansion, and backend signal pipelines for auto-trading.
 
 ---
 
-## 🚀 Features
+## 🚀 Overview
+The backend uses Flask as the main API layer and connects to a PostgreSQL database containing price history and generated signals. AWS Lambda handles automated data ingestion and signal generation, while Elastic Beanstalk hosts the API used by the frontend.
+The frontend is built with React, Vite, and Tailwind, providing an interactive interface for viewing price charts and recent signals. It communicates directly with the Flask API and requires only an API base URL.
 
 ### 🔧 Backend (Flask + PostgreSQL)
 - REST API for prices, indicators, and signal summaries
@@ -71,6 +73,14 @@ DB_PASSWORD = "your_password"
 DB_HOST = "localhost"
 DB_PORT = "5432"
 DISCORD_WEBHOOK = "https://discord.com/api/webhooks/..."
+
+# Optional feature toggles
+ENABLE_ALERTS = True
+ALERT_COOLDOWN_MIN = 30
+LOOKBACK_BARS = 400
+ENABLE_REGIME_FILTER = True
+THRESHOLD_PCT = 0.03
+THRESHOLD_POSTURE = "momentum"
 ```
 
 ### 2. Install Requirements
@@ -82,13 +92,19 @@ pip install flask flask-cors psycopg2 pandas yfinance
 ### 3. Run the Server
 
 ```bash
-python app.py
+python backend/app.py
+```
+
+### 3. Initialize the Database (first time only)
+```bash
+python backend/db_setup.py
 ```
 
 ---
 
 ## 🔌 API Endpoints
 
+- `GET /health` — simple health check
 - `GET /prices/<ticker>` — returns price history
 - `GET /signals/recent` — returns 10 latest logic-based signals
 - `GET /signals/summary` — returns signal counts by type
