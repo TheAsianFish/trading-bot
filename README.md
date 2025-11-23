@@ -165,17 +165,22 @@ VITE_API_BASE=https://your-elastic-beanstalk-url
 
 ## ✅ TODO / Future Roadmap
 
-- [ ] Automate price and signal generation via AWS
-- [ ] Add breakout, reversal, candlestick, and multi-signal detectors
-- [ ] Full trading bot integration with execution via API
-- [ ] Quant + ML model experimentation
-- [ ] Auth and multi-user dashboards
+- [ ] Expand automated AWS workflows
+- [ ] Add additional technical indicators such as breakouts, reversals, candlestick patterns, etc.
+- [ ] Add multi-signal confirmation models and scoring
+- [ ] Improve frontend charting and filtering tools
+- [ ] Improve frontend UI/UX
+- [ ] Build optional trading execution layer through external APIs
+- [ ] Build web-scraping service for news and real-time updates for each ticker
+- [ ] Prepare the project for open-source contribution
 
 ---
 
 ## 🔒 Security / Deployment Notes
 
 - Never expose `config.py` in production
+- Always use secure AWS IAM roles
+- Keep PostgreSQL credentials private
 - Separate public dashboard vs. private trading logic
 - Consider FastAPI if switching to async/microservices
 
@@ -184,6 +189,6 @@ VITE_API_BASE=https://your-elastic-beanstalk-url
 ## 👤 Author
 
 **Patrick Chung**  
-Built as a research-backed production tool to compete and match against existing trading bots.
+Built as a scalable research and automation platform for modern trading strategies.
 
 ---
