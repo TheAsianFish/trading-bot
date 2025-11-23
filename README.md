@@ -107,8 +107,8 @@ python backend/db_setup.py
 - `GET /health` — simple health check
 - `GET /prices/<ticker>` — returns price history
 - `GET /signals/recent` — returns 10 latest logic-based signals
+- - `GET /signals/by/<ticker>` — returns signals for a specific ticker
 - `GET /signals/summary` — returns signal counts by type
-- `GET /signals/generated/<ticker>` — technical indicators like RSI/MACD
 - `POST /signals/generate/<ticker>` — forces generation of all signals for ticker
 
 ---
