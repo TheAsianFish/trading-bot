@@ -1,12 +1,14 @@
 # 🧠 Trading Bot Dashboard (Fullstack)
 
-An advanced trading signal dashboard and automation system built with **React**, **Flask**, and **PostgreSQL**. Designed to detect technical indicators and trading events, visualize them in a clean UI, and prepare for future **AWS automation** and **algorithmic trading integration**.
+An advanced trading signal dashboard and automation system built with **React**, **Flask**, and **PostgreSQL**. Designed to visualize prices, detect technical indicators and trading events, monitor them in a clean UI, and automated on **AWS Lambda**, **Elastic Beanstalk**, and other cloud services.
 
 > ⚙️ Built for eventual real-time performance, quantitative strategy expansion, and backend signal pipelines for auto-trading.
 
 ---
 
-## 🚀 Features
+## 🚀 Overview
+The backend uses Flask as the main API layer and connects to a PostgreSQL database containing price history and generated signals. AWS Lambda handles automated data ingestion and signal generation, while Elastic Beanstalk hosts the API used by the frontend.
+The frontend is built with React, Vite, and Tailwind, providing an interactive interface for viewing price charts and recent signals. It communicates directly with the Flask API and requires only an API base URL.
 
 ### 🔧 Backend (Flask + PostgreSQL)
 - REST API for prices, indicators, and signal summaries
@@ -71,6 +73,14 @@ DB_PASSWORD = "your_password"
 DB_HOST = "localhost"
 DB_PORT = "5432"
 DISCORD_WEBHOOK = "https://discord.com/api/webhooks/..."
+
+# Optional feature toggles
+ENABLE_ALERTS = True
+ALERT_COOLDOWN_MIN = 30
+LOOKBACK_BARS = 400
+ENABLE_REGIME_FILTER = True
+THRESHOLD_PCT = 0.03
+THRESHOLD_POSTURE = "momentum"
 ```
 
 ### 2. Install Requirements
@@ -82,17 +92,23 @@ pip install flask flask-cors psycopg2 pandas yfinance
 ### 3. Run the Server
 
 ```bash
-python app.py
+python backend/app.py
+```
+
+### 3. Initialize the Database (first time only)
+```bash
+python backend/db_setup.py
 ```
 
 ---
 
 ## 🔌 API Endpoints
 
+- `GET /health` — simple health check
 - `GET /prices/<ticker>` — returns price history
 - `GET /signals/recent` — returns 10 latest logic-based signals
+- - `GET /signals/by/<ticker>` — returns signals for a specific ticker
 - `GET /signals/summary` — returns signal counts by type
-- `GET /signals/generated/<ticker>` — technical indicators like RSI/MACD
 - `POST /signals/generate/<ticker>` — forces generation of all signals for ticker
 
 ---
@@ -107,15 +123,19 @@ python app.py
 | volume     | BIGINT   | Daily volume         |
 | timestamp  | TIMESTAMP| Time of record       |
 
-### `generated_signals`
-| Column          | Type      |
-|-----------------|-----------|
-| id              | SERIAL    |
-| ticker          | TEXT      |
-| signal_type     | TEXT      |
-| signal_value    | REAL      |
-| signal_strength | TEXT      |
-| timestamp       | TIMESTAMP |
+### `signals`
+| Column         | Type       |
+|----------------|------------|
+| id             | SERIAL     |
+| ticker         | TEXT       |
+| signal_type    | TEXT       |
+| signal_value   | REAL       |
+| strategy       | TEXT       |
+| confidence     | REAL       |
+| action         | TEXT       |
+| strength       | TEXT       |
+| ...            | ...        |
+| timestamp      | TIMESTAMPZ |
 
 ---
 
@@ -125,7 +145,7 @@ python app.py
 - **MACD** — moving average crossovers
 - **BOLLINGER** — price volatility bands
 - **MA Cross** — 50/200-day golden/death crosses
-- **VOLUME** — spike detection for trend changes
+- **THRESHOLD** — daily open percentage move model
 
 ---
 
@@ -137,21 +157,30 @@ npm install
 npm run dev
 ```
 
+## Set API base URL
+
+VITE_API_BASE=https://your-elastic-beanstalk-url
+
 ---
 
 ## ✅ TODO / Future Roadmap
 
-- [ ] Automate price and signal generation via AWS
-- [ ] Add breakout, reversal, candlestick, and multi-signal detectors
-- [ ] Full trading bot integration with execution via API
-- [ ] Quant + ML model experimentation
-- [ ] Auth and multi-user dashboards
+- [ ] Expand automated AWS workflows
+- [ ] Add additional technical indicators such as breakouts, reversals, candlestick patterns, etc.
+- [ ] Add multi-signal confirmation models and scoring
+- [ ] Improve frontend charting and filtering tools
+- [ ] Improve frontend UI/UX
+- [ ] Build optional trading execution layer through external APIs
+- [ ] Build web-scraping service for news and real-time updates for each ticker
+- [ ] Prepare the project for open-source contribution
 
 ---
 
 ## 🔒 Security / Deployment Notes
 
 - Never expose `config.py` in production
+- Always use secure AWS IAM roles
+- Keep PostgreSQL credentials private
 - Separate public dashboard vs. private trading logic
 - Consider FastAPI if switching to async/microservices
 
@@ -160,6 +189,6 @@ npm run dev
 ## 👤 Author
 
 **Patrick Chung**  
-Built as a research-backed production tool to compete and match against existing trading bots.
+Built as a scalable research and automation platform for modern trading strategies.
 
 ---
