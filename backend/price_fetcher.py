@@ -14,7 +14,7 @@ def _tz_utc(df):
 def _fetch_hourly_once(ticker: str, period: str, interval: str):
     tk = yf.Ticker(ticker)
     df = tk.history(period=period, interval=interval, auto_adjust=False, actions=False)
-    if df is None or df.empty:
+    if df.empty:
         return None
     df = _tz_utc(df)
     # Normalize to hourly frame
