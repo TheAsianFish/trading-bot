@@ -133,6 +133,8 @@ def insert_signal(
             "bar_ts": bar_ts or timestamp,  # keep in sync if only timestamp is passed
         })
 
+        cursor.execute(""" DELETE FROM signals WHERE bar_ts < NOW() - INTERVAL '30 days'; """)
+
         if close_conn:
             conn.commit()
         print(f"Inserted signal: {ticker} {signal_type}/{action} value={signal_value}")
